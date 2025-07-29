@@ -316,7 +316,7 @@ function create_validator_with_keys() {
         return
     fi
 
-    local description="[\"$moniker\",\"$identity\",\"$website\",\"$security_contact\",\"$details\"]"
+    local description="(\"$moniker\",\"$identity\",\"$website\",\"$security_contact\",\"$details\")"
 
     print_header "Transaction Review"
     echo "Contract:          $STAKING_CONTRACT"
