@@ -14,7 +14,7 @@ usage() {
     echo "  -l, --rpc-local <URL>     Your node's local RPC URL."
     echo "  -c, --config <PATH>       Path to config.toml (alternative to --rpc-local)."
     echo "  -i, --interval <SECONDS>* Refresh interval in seconds."
-    echo "  -w, --width <NUMBER>      Width of the output table. (Default: auto-detected)"
+    echo "  -w, --width <NUMBER>      Width of the output table. (Max: 108, Default: auto)"
     echo "  -h, --help                Display this help message."
 }
 
@@ -35,8 +35,13 @@ if [[ -z "$LINE_WIDTH" ]]; then
     if command -v tput &> /dev/null && tput cols &> /dev/null; then
         LINE_WIDTH=$(tput cols)
     else
-        LINE_WIDTH=100 # Fallback width if auto-detection fails
+        LINE_WIDTH=108 # Fallback width if auto-detection fails
     fi
+fi
+
+# Set a maximum width of 108
+if (( LINE_WIDTH > 108 )); then
+    LINE_WIDTH=108
 fi
 
 determine_local_rpc() {
@@ -83,16 +88,16 @@ first_loop=true
 
 while true; do
     local_status=$(curl -s "$RPC_LOCAL/status")
-    if ! local_height=$(echo "$local_status" | jq -r '.result.sync_info.latest_block_height'); then
-        echo -e "${RED}Failed to fetch status from Local RPC: $RPC_LOCAL${NC}"
-        sleep "$INTERVAL"
-        continue
-    fi
+    local_height=$(echo "$local_status" | jq -r '.result.sync_info.latest_block_height')
     catching_up=$(echo "$local_status" | jq -r '.result.sync_info.catching_up')
 
     public_status=$(curl -s "$RPC_PUBLIC/status")
-    if ! public_height=$(echo "$public_status" | jq -r '.result.sync_info.latest_block_height'); then
-         echo -e "${RED}Failed to fetch status from Public RPC: $RPC_PUBLIC${NC}"
+    public_height=$(echo "$public_status" | jq -r '.result.sync_info.latest_block_height')
+
+    # Improved error handling for local RPC
+    if [[ ! "$local_height" =~ ^[0-9]+$ ]]; then
+        printf "%-10s | ${RED}%-10s${NC} | %-10s | ${RED}%-10s${NC} | %-10s | %-15s | %-12s | ${RED}%-11s${NC}\n" \
+            "$(date '+%H:%M:%S')" "RPC ERR" "${public_height:--}" "ERR" "--" "--" "--" "ERR"
         sleep "$INTERVAL"
         continue
     fi
@@ -127,7 +132,7 @@ while true; do
     elif [[ $(echo "$speed >= 1" | bc -l) -eq 1 ]]; then speed_color=$YELLOW
     else speed_color=$RED; fi
 
-    printf "%-10s | %-10s | %-10s | ${diff_color}%-10s${NC} | +%-9s | ${speed_color}%-15s${NC} | %-12s | %-11s\n" \
+    printf "%-10s | %-10s | %-10s | ${diff_color}%-10s${NC} | +%-9s | ${speed_color}%-15s${NC} | %-12s | %-11s${NC}\n" \
         "$(date '+%H:%M:%S')" "$local_height" "$public_height" "$diff_public" "$diff_local" "$speed blk/s" "$eta_fmt" "$catching_up"
 
     prev_height=$local_height
