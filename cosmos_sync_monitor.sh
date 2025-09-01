@@ -19,7 +19,7 @@ DEFAULT_PUBLIC_RPC="https://lumera-testnet-rpc.linknode.org"
 DEFAULT_NODE_HOME="$HOME/.lumera"
 DEFAULT_LOCAL_RPC_FALLBACK="http://localhost:26657"
 INTERVAL=5
-LINE_WIDTH=108
+LINE_WIDTH=122 
 
 # === VARIABLES TO STORE FLAG VALUES ===
 LOCAL_RPC_FLAG=""
@@ -64,47 +64,37 @@ check_deps() {
   done
 }
 
-# === FUNCTION TO GET RPC FROM CONFIG FILE ===
 get_rpc_from_config() {
   local node_home="$1"
   local config_path="$node_home/config/config.toml"
   if [[ ! -f "$config_path" ]]; then
-    echo "$DEFAULT_LOCAL_RPC_FALLBACK" # Fallback if config doesn't exist
+    echo "$DEFAULT_LOCAL_RPC_FALLBACK"
     return
   fi
 
-  local rpc_section
-  rpc_section=$(awk '/^\[rpc\]/{flag=1;next}/^\[/{flag=0}flag' "$config_path")
-  local rpc_laddr
-  rpc_laddr=$(echo "$rpc_section" | grep -E '^\s*laddr\s*=' | head -n1 | cut -d '=' -f2- | tr -d ' "')
+  local rpc_section=$(awk '/^\[rpc\]/{flag=1;next}/^\[/{flag=0}flag' "$config_path")
+  local rpc_laddr=$(echo "$rpc_section" | grep -E '^\s*laddr\s*=' | head -n1 | cut -d '=' -f2- | tr -d ' "')
 
   if [[ "$rpc_laddr" == tcp://* ]]; then
     rpc_laddr="http://${rpc_laddr#tcp://}"
   fi
 
-  # If empty, use the fallback
   [[ -z "$rpc_laddr" ]] && rpc_laddr="$DEFAULT_LOCAL_RPC_FALLBACK"
-
   echo "$rpc_laddr"
 }
 
 # === CHECK DEPENDENCIES ===
 check_deps
 
-# === DETERMINE FINAL CONFIGURATION (FLAG > CONFIG > DEFAULT) ===
+# === DETERMINE FINAL CONFIGURATION ===
 NODE_HOME=${NODE_HOME_FLAG:-$DEFAULT_NODE_HOME}
 RPC_PUBLIC=${PUBLIC_RPC_FLAG:-$DEFAULT_PUBLIC_RPC}
 
-# Logic for Local RPC:
-# 1. Use the -l flag if provided.
-# 2. If not, try to read from the config file in NODE_HOME.
-# 3. If that fails, use the default fallback.
 if [[ -n "$LOCAL_RPC_FLAG" ]]; then
   RPC_LOCAL="$LOCAL_RPC_FLAG"
 else
   RPC_LOCAL=$(get_rpc_from_config "$NODE_HOME")
 fi
-
 
 # === HEADER OUTPUT ===
 LINE=$(printf -- '-%.0s' $(seq 1 $LINE_WIDTH))
@@ -117,8 +107,9 @@ echo -e "${YELLOW}Public RPC   : ${NC}$RPC_PUBLIC"
 echo -e "${YELLOW}Node Home    : ${NC}$NODE_HOME"
 echo -e "${YELLOW}Interval     : ${NC}${INTERVAL}s"
 echo -e "${BLUE}${LINE}${NC}"
-printf "${BLUE}%-10s | %-10s | %-10s | %-10s | %-10s | %-15s | %-12s | %-11s${NC}\n" \
-  "Time" "Local" "Remote" "Behind" "+Blocks" "Speed (blk/s)" "ETA" "Syncing"
+
+printf "${BLUE}%-10s | %-10s | %-10s | %-10s | %-10s | %-15s | %-12s | %-8s | %-11s${NC}\n" \
+  "Time" "Local" "Remote" "Behind" "+Blocks" "Speed (blk/s)" "ETA" "Peers" "Syncing"
 echo -e "${BLUE}${LINE}${NC}"
 
 # === INIT ===
@@ -129,20 +120,23 @@ first_loop=true
 # === MAIN LOOP ===
 while true; do
   local_status=$(curl -s "$RPC_LOCAL/status")
+  net_info=$(curl -s "$RPC_LOCAL/net_info")
+  
   local_height=$(echo "$local_status" | jq -r '.result.sync_info.latest_block_height')
   catching_up=$(echo "$local_status" | jq -r '.result.sync_info.catching_up')
+  peer_count=$(echo "$net_info" | jq -r '.result.n_peers')
   
   public_status=$(curl -s "$RPC_PUBLIC/status")
   public_height=$(echo "$public_status" | jq -r '.result.sync_info.latest_block_height')
 
-  # Validate JSON output, set to 'N/A' on error
+  # Validasi output
   if [[ -z "$local_height" || "$local_height" == "null" ]]; then local_height="N/A"; fi
   if [[ -z "$public_height" || "$public_height" == "null" ]]; then public_height="N/A"; fi
   if [[ -z "$catching_up" || "$catching_up" == "null" ]]; then catching_up="N/A"; fi
+  if [[ -z "$peer_count" || "$peer_count" == "null" ]]; then peer_count="N/A"; fi
   
   now=$(date +%s)
   
-  # Only perform calculations if heights are numbers
   if [[ "$local_height" =~ ^[0-9]+$ && "$public_height" =~ ^[0-9]+$ ]]; then
     diff_public=$((public_height - local_height))
   else
@@ -157,8 +151,7 @@ while true; do
   elif [[ "$prev_height" =~ ^[0-9]+$ && "$local_height" =~ ^[0-9]+$ ]]; then
     elapsed=$((now - prev_time))
     diff_local=$((local_height - prev_height))
-
-    # Avoid division by zero
+    
     if [[ $elapsed -gt 0 ]]; then
       speed=$(echo "scale=2; $diff_local / $elapsed" | bc)
     else
@@ -179,14 +172,12 @@ while true; do
       diff_local="N/A"
   fi
 
-  # Color coding
   if [[ "$diff_public" =~ ^[0-9]+$ ]]; then
     if (( diff_public < 50 )); then diff_color=$GREEN
     elif (( diff_public < 1000 )); then diff_color=$YELLOW
     else diff_color=$RED
     fi
-  else
-    diff_color=$NC
+  else diff_color=$NC
   fi
 
   if [[ "$speed" =~ ^[0-9.]+$ ]]; then
@@ -194,12 +185,19 @@ while true; do
     elif [[ $(echo "$speed >= 1" | bc -l) -eq 1 ]]; then speed_color=$YELLOW
     else speed_color=$RED
     fi
-  else
-    speed_color=$NC
+  else speed_color=$NC
+  fi
+  
+  if [[ "$peer_count" =~ ^[0-9]+$ ]]; then
+    if (( peer_count > 25 )); then peer_color=$GREEN
+    elif (( peer_count >= 10 )); then peer_color=$YELLOW
+    else peer_color=$RED
+    fi
+  else peer_color=$NC
   fi
 
-  printf "%-10s | %-10s | %-10s | ${diff_color}%-10s${NC} | +%-9s | ${speed_color}%-15s${NC} | %-12s | %-11s\n" \
-    "$(date '+%H:%M:%S')" "$local_height" "$public_height" "$diff_public" "$diff_local" "$speed blk/s" "$eta_fmt" "$catching_up"
+  printf "%-10s | %-10s | %-10s | ${diff_color}%-10s${NC} | +%-9s | ${speed_color}%-15s${NC} | %-12s | ${peer_color}%-8s${NC} | %-11s\n" \
+    "$(date '+%H:%M:%S')" "$local_height" "$public_height" "$diff_public" "$diff_local" "$speed blk/s" "$eta_fmt" "$peer_count" "$catching_up"
 
   prev_height=$local_height
   prev_time=$now
