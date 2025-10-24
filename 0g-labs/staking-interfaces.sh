@@ -23,11 +23,11 @@
 # ==============================================================================
 
 # --- Configuration ---
-RPC_URL="https://evmrpc-testnet.0g.ai"
-STAKING_CONTRACT="0xea224dBB52F57752044c0C86aD50930091F561B9" # Testnet Address
+RPC_URL="https://evmrpc.0g.ai"
+STAKING_CONTRACT="0xea224dBB52F57752044c0C86aD50930091F561B9" # Contract Address
 
 # Default paths - can be overridden
-DEFAULT_HOMEDIR="$HOME/.0gchaind/galileo/0g-home/0gchaind-home"
+DEFAULT_HOMEDIR="$HOME/.0gchaind/0g-home/0gchaind-home"
 DEFAULT_CHAIN_SPEC="devnet"
 DEFAULT_BINARY_PATH="/usr/local/bin/0gchaind"
 
@@ -741,7 +741,7 @@ function main_menu() {
         print_color "   0G Chain Enhanced Staking Helper" $C_BLUE
         print_color "==========================================" $C_BLUE
         echo
-        print_color "  Network:          Testnet" $C_CYAN
+        print_color "  Network:          Mainnet" $C_CYAN
         print_color "  Staking Contract: $STAKING_CONTRACT" $C_CYAN
         print_color "  RPC Endpoint:     $RPC_URL" $C_CYAN
         echo
