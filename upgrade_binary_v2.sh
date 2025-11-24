@@ -494,21 +494,23 @@ cleanup_temp_files
 FAST_MODE_ENTERED=0
 
 while true; do
-  latest_block=$(curl -s --max-time 5 "${RPC_URL}/status" | jq -r .result.sync_info.latest_block_height 2>/dev/null)
+  latest_block=$(curl -s --max-time 5 "${RPC_URL}/status" \
+      | jq -r .result.sync_info.latest_block_height 2>/dev/null)
+
   if [[ ! "$latest_block" =~ ^[0-9]+$ ]]; then
     echo -e "\r⚠️  ${C_RED}Failed to get latest block, retrying...${C_RESET}   "
     sleep "$NORMAL_SLEEP_INTERVAL"
     continue
   fi
 
-  local blocks_remaining=$((TARGET_BLOCK - latest_block))
+  blocks_remaining=$((TARGET_BLOCK - latest_block))
 
   if (( blocks_remaining <= 0 )); then
     echo -e "\n🚀 ${C_GREEN}TARGET BLOCK REACHED in polling mode (${latest_block}) — starting upgrade...${C_RESET}"
     if perform_upgrade; then exit 0; else exit 1; fi
   fi
 
-  # Switch to fast WS mode when close
+  # Switch to FAST WS mode
   if (( blocks_remaining <= FAST_CHECK_THRESHOLD )) && [ "$FAST_MODE_ENTERED" -eq 0 ]; then
     FAST_MODE_ENTERED=1
     if run_websocket_fast_mode; then
@@ -516,16 +518,13 @@ while true; do
     fi
   fi
 
-  # Polling mode display & progress
-  local eta_seconds
   eta_seconds=$(echo "($blocks_remaining * $AVG_BLOCK_TIME)" | bc | cut -d'.' -f1)
-  local eta_str
   eta_str=$(format_eta "$eta_seconds")
 
-  local prop_str=""
+  prop_str=""
   if [ -n "$PROPOSAL_ID" ]; then
-    local status
-    status=$(curl -s --max-time 2 "$API_URL/cosmos/gov/v1/proposals/$PROPOSAL_ID" | jq -r .proposal.status 2>/dev/null)
+    status=$(curl -s --max-time 2 "$API_URL/cosmos/gov/v1/proposals/$PROPOSAL_ID" \
+        | jq -r .proposal.status 2>/dev/null)
     status=${status#PROPOSAL_STATUS_}
     prop_str=" | Prop #$PROPOSAL_ID: ${status:-UNKNOWN}"
   fi
