@@ -108,31 +108,50 @@ send_discord_notification() {
     START)
       local net_info
       net_info=$(get_network_info)
+
+      local proposal_label
+      if [ -n "$PROPOSAL_ID" ]; then
+        proposal_label="Proposal #$PROPOSAL_ID"
+      else
+        proposal_label="N/A"
+      fi
+
       payload=$(jq -n \
         --arg title "$title" \
-        --arg desc "Cosmos upgrade monitor v2 started (Hybrid Polling + WebSocket)." \
+        --arg desc "Upgrade monitor initialized (Hybrid Polling + WebSocket)." \
         --arg daemon "$DAEMON_NAME" \
+        --arg current_version "$CURRENT_VERSION" \
+        --arg new_version "$NEW_VERSION" \
         --arg target "$TARGET_BLOCK" \
         --arg rpc "$RPC_URL" \
         --arg ws "$WS_URL" \
         --arg net "$net_info" \
+        --arg prop "$proposal_label" \
         --arg ts "$ts" \
-        --arg footer "Server: $hostname" \
+        --arg footer "Server: $hostname | Mode: Hybrid" \
         --argjson color "$color" \
-        '{embeds:[{
-          title:$title,
-          description:$desc,
-          color:$color,
-          timestamp:$ts,
-          footer:{text:$footer},
-          fields:[
-            {name:"🔧 Daemon",value:$daemon,inline:true},
-            {name:"🎯 Target Block",value:$target,inline:true},
-            {name:"🌐 RPC",value:$rpc,inline:false},
-            {name:"🌐 WebSocket",value:$ws,inline:false},
-            {name:"🧱 Network",value:$net,inline:false}
-          ]
-        }] }')
+        '
+        {
+          embeds: [{
+            title: $title,
+            description: $desc,
+            color: $color,
+            timestamp: $ts,
+            footer: { text: $footer },
+            fields: [
+              { name: "🔧 Daemon",           value: $daemon,           inline: true },
+              { name: "📦 Current Version",  value: $current_version,   inline: true },
+              { name: "🆕 Upgrade Version",  value: $new_version,       inline: true },
+              { name: "🎯 Target Block",     value: $target,            inline: true },
+              { name: "🗳️ Proposal",         value: $prop,              inline: true },
+              { name: "🌐 RPC Endpoint",     value: $rpc,               inline: false },
+              { name: "🌐 WebSocket",        value: $ws,                inline: false },
+              { name: "🧱 Network Info",     value: $net,               inline: false }
+            ]
+          }]
+        }
+        '
+      )
       ;;
     PROGRESS)
       local blocks_remaining="$additional"
@@ -485,6 +504,31 @@ perform_upgrade() {
   SCRIPT_STATUS="SUCCESS"
   return 0
 }
+
+#======================================================================================================================
+# GLOBAL EXIT HANDLER (CRASH / ERROR / KILL SAFE)
+#======================================================================================================================
+
+handle_exit() {
+    exit_code=$?
+
+    # Jika SUCCESS, tidak perlu kirim notif
+    if [ "$SCRIPT_STATUS" == "SUCCESS" ]; then
+        return
+    fi
+
+    # Pesan default kalau FAILURE_REASON belum di-set
+    if [ -z "$FAILURE_REASON" ]; then
+        FAILURE_REASON="Script stopped unexpectedly."
+    fi
+
+    # Kirim notif ke Discord
+    send_discord_notification "FAILURE" \
+        "$FAILURE_REASON" \
+        "Exit code: $exit_code | Last block: ${latest_block:-unknown}"
+}
+
+trap handle_exit EXIT
 
 #======================================================================================================================
 # MAIN LOOP
