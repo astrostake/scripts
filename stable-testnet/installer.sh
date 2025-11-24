@@ -145,7 +145,7 @@ echo -e "\n📦 Installing snapshot..."
 cp $HOME/.$FOLDER_NAME/data/priv_validator_state.json $HOME/priv_validator_state.backup
 
 rm -rf $HOME/.$FOLDER_NAME/data
-curl -Ls $SNAPSHOT_URL | lz4 -dc - | tar -xf - -C $HOME/.$FOLDER_NAME
+curl -L $SNAPSHOT_URL | lz4 -dc - | tar -xf - -C $HOME/.$FOLDER_NAME
 
 mv $HOME/priv_validator_state.backup $HOME/.$FOLDER_NAME/data/priv_validator_state.json
 
