@@ -436,27 +436,31 @@ run_websocket_fast_mode() {
   echo -e "\n⚡ ${C_YELLOW}Entering WebSocket FAST MODE...${C_RESET}"
   send_discord_notification "FAST_MODE" "Entering WebSocket fast mode. Monitoring each new block in real-time." ""
 
-  # Start websocat in background, output → named pipe
   {
-    websocat -E -t "$WS_URL" <<< "$sub"
+    websocat -n -t "$WS_URL" <<< "$sub"
   } > "$pipe" 2>/dev/null &
   local ws_pid=$!
 
+  # Block reading loop
   while IFS= read -r line < "$pipe"; do
-    local ws_height
-    ws_height=$(echo "$line" | jq -r '.result.data.value.block.header.height' 2>/dev/null)
-    if [[ "$ws_height" =~ ^[0-9]+$ ]]; then
-      local rem=$((TARGET_BLOCK - ws_height))
-      printf "\r${C_RED}⚡ WS MODE${C_RESET} | Block: ${C_GREEN}%d${C_RESET} | Target: ${C_CYAN}%d${C_RESET} | Rem: ${C_YELLOW}%d${C_RESET}   " \
-        "$ws_height" "$TARGET_BLOCK" "$rem"
+    # Filter only lines containing block data for efficient parsing
+    if [[ "$line" == *"header"* ]]; then
+        local ws_height
+        ws_height=$(echo "$line" | jq -r '.result.data.value.block.header.height' 2>/dev/null)
+        
+        if [[ "$ws_height" =~ ^[0-9]+$ ]]; then
+          local rem=$((TARGET_BLOCK - ws_height))
+          printf "\r${C_RED}⚡ WS MODE${C_RESET} | Block: ${C_GREEN}%d${C_RESET} | Target: ${C_CYAN}%d${C_RESET} | Rem: ${C_YELLOW}%d${C_RESET}   " \
+            "$ws_height" "$TARGET_BLOCK" "$rem"
 
-      if (( ws_height >= TARGET_BLOCK )); then
-        echo -e "\n\n🚀 ${C_GREEN}TARGET BLOCK REACHED via WebSocket (${ws_height}) — starting upgrade...${C_RESET}"
-        latest_block="$ws_height"
-        echo "$ws_height" > /tmp/astrostake_upgrade_success
-        kill "$ws_pid" 2>/dev/null || true
-        break
-      fi
+          if (( ws_height >= TARGET_BLOCK )); then
+            echo -e "\n\n🚀 ${C_GREEN}TARGET BLOCK REACHED via WebSocket (${ws_height}) — starting upgrade...${C_RESET}"
+            latest_block="$ws_height"
+            echo "$ws_height" > /tmp/astrostake_upgrade_success
+            kill "$ws_pid" 2>/dev/null || true
+            break
+          fi
+        fi
     fi
   done
 
@@ -466,6 +470,7 @@ run_websocket_fast_mode() {
     return 0
   else
     echo -e "\n⚠️  ${C_RED}WebSocket stream ended unexpectedly. Falling back to polling...${C_RESET}"
+    kill "$ws_pid" 2>/dev/null || true
     return 1
   fi
 }
