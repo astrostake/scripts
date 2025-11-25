@@ -41,7 +41,7 @@ SERVICE_NAME="stabled"
 CHAIN_ID="stabletestnet_2201-1"
 FOLDER_NAME="stable_build"
 
-BINARY_URL="https://stable-testnet-data.s3.us-east-1.amazonaws.com/stabled-1.1.1-linux-amd64-testnet.tar.gz"
+BINARY_URL="https://stable-testnet-data.s3.us-east-1.amazonaws.com/stabled-1.1.2-linux-amd64-testnet.tar.gz"
 GENESIS_URL="https://vault.astrostake.xyz/testnet/stable/genesis.json"
 ADDRBOOK_URL="https://vault.astrostake.xyz/testnet/stable/addrbook.json"
 SNAPSHOT_URL="https://vault.astrostake.xyz/testnet/stable/stable-testnet_snapshot.tar.lz4"
