@@ -2,7 +2,7 @@
 set -e
 
 echo "====================================================="
-echo " 🚀 Lumera Testnet Auto Installer"
+echo " 🚀 Lumera Auto Installer"
 echo "====================================================="
 
 ###############################################################################
@@ -41,10 +41,10 @@ SERVICE_NAME="lumerad"
 CHAIN_ID="lumera-mainnet-1"
 FOLDER_NAME="lumera"
 
-BINARY_URL="https://github.com/LumeraProtocol/lumera/releases/download/v1.9.0/lumera_v1.9.0_linux_amd64.tar.gz"
+BINARY_URL="https://github.com/LumeraProtocol/lumera/releases/download/v1.9.1/lumera_v1.9.1_linux_amd64.tar.gz"
 GENESIS_URL="https://snapshots.linknode.org/lumera/genesis"
 ADDRBOOK_URL="https://snapshots.linknode.org/lumera/addrbook"
-SNAPSHOT_URL="https://snapshots.linknode.org/lumera/snapshot"
+SNAPSHOT_API_URL="https://snapshots.linknode.org/lumera/api"
 
 HOME_FOLDER="$HOME/.lumera"
 CONFIG="$HOME_FOLDER/config"
@@ -52,6 +52,52 @@ CONFIG="$HOME_FOLDER/config"
 SEEDS=""
 
 PEERS="277773c00a7f7029775deba6e28532c40b670d16@95.214.55.46:30357,c8e9ab5451951bc8f75cdc0eb81b9cb25571e7df@161.35.221.191:26656,ddd091cecab267b467f9f6167e9268391fc0ec1f@57.128.98.34:20001,,faf9bc564f4d200d741da088731b6b3ba02192aa@65.108.232.93:30756,89757803f40da51678451735445ad40d5b15e059@169.155.45.78:26656,1ef18bb3ed8efee9fb150151cbcdfca438fa9db4@64.185.227.242:30756,ab5b0bafe670543d6f25dea19a264c7da1e50672@65.108.201.240:30756,5b8d4baa4e4c86b94322d452dc66c4bf218cfc95@184.107.244.74:12300,54361f222e87b7dd1cb90973079c44e7e31c03e5@15.235.42.134:12300,2afe400bfe662b915111ec6c1e5fcb0d2c0ba64e@37.27.239.10:26656"
+
+###############################################################################
+#                           SNAPSHOT CHECK                                     #
+###############################################################################
+
+echo -e "\n🔍 Checking latest snapshot availability..."
+
+SNAPSHOT_JSON=$(curl -s $SNAPSHOT_API_URL)
+
+if [ -z "$SNAPSHOT_JSON" ]; then
+    echo "⚠️  Failed to fetch snapshot data. Skipping snapshot check."
+    USE_SNAPSHOT=false
+else
+    SNAP_HEIGHT=$(echo $SNAPSHOT_JSON | jq -r '.[0].blockHeight')
+    SNAP_UPDATED=$(echo $SNAPSHOT_JSON | jq -r '.[0].updated')
+    SNAP_SIZE=$(echo $SNAPSHOT_JSON | jq -r '.[0].files[0].size')
+    SNAP_URL=$(echo $SNAPSHOT_JSON | jq -r '.[0].files[0].downloadUrl')
+    
+    CURRENT_TIME=$(date +%s)
+    SNAP_TIME=$(date -d "$SNAP_UPDATED" +%s)
+    DIFF_SEC=$((CURRENT_TIME - SNAP_TIME))
+    
+    if [ $DIFF_SEC -gt 86400 ]; then
+        TIME_AGO="$((DIFF_SEC / 86400)) days ago"
+    elif [ $DIFF_SEC -gt 3600 ]; then
+        TIME_AGO="$((DIFF_SEC / 3600)) hours ago"
+    else
+        TIME_AGO="$((DIFF_SEC / 60)) minutes ago"
+    fi
+
+    echo "-----------------------------------------------------"
+    echo "📸 LATEST SNAPSHOT INFO"
+    echo "-----------------------------------------------------"
+    echo "   📦 Block Height : $SNAP_HEIGHT"
+    echo "   💾 Size         : $SNAP_SIZE"
+    echo "   ⏰ Updated      : $TIME_AGO ($SNAP_UPDATED)"
+    echo "-----------------------------------------------------"
+
+    read -p "Do you want to install this snapshot? (y/n): " INSTALL_SNAP_OPT
+    if [[ "$INSTALL_SNAP_OPT" =~ ^[Yy]$ ]]; then
+        USE_SNAPSHOT=true
+        SNAPSHOT_URL=$SNAP_URL
+    else
+        USE_SNAPSHOT=false
+    fi
+fi
 
 ###############################################################################
 #                        INSTALL DEPENDENCIES + GO                             #
@@ -142,14 +188,22 @@ sed -i -e "/^\[p2p\]/,/^\[/{s/^[[:space:]]*seeds *=.*/seeds = \"$SEEDS\"/}" \
 #                               SNAPSHOT                                       #
 ###############################################################################
 
-echo -e "\n📦 Installing snapshot..."
+if [ "$USE_SNAPSHOT" = true ]; then
+    echo -e "\n📦 Installing snapshot..."
+    echo "Target: $SNAPSHOT_URL"
 
-cp $HOME_FOLDER/data/priv_validator_state.json $HOME/priv_validator_state.backup
+    cp $HOME_FOLDER/data/priv_validator_state.json $HOME/priv_validator_state.backup
 
-rm -rf $HOME_FOLDER/data
-curl -L $SNAPSHOT_URL | lz4 -dc - | tar -xf - -C $HOME_FOLDER
+    $BINARY_NAME tendermint unsafe-reset-all --home $HOME_FOLDER --keep-addr-book
 
-mv $HOME/priv_validator_state.backup $HOME_FOLDER/data/priv_validator_state.json
+    curl -L $SNAPSHOT_URL | lz4 -dc - | tar -xf - -C $HOME_FOLDER
+
+    mv $HOME/priv_validator_state.backup $HOME_FOLDER/data/priv_validator_state.json
+    
+    echo "✅ Snapshot installed successfully!"
+else
+    echo -e "\n⏭️  Skipping snapshot installation based on user choice."
+fi
 
 ###############################################################################
 #                           SYSTEMD SERVICE                                   #
