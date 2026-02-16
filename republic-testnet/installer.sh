@@ -46,7 +46,7 @@ SERVICE_NAME="republicd"
 CHAIN_ID="raitestnet_77701-1"
 FOLDER_NAME="republic"
 
-BINARY_URL="https://github.com/RepublicAI/networks/releases/download/v0.2.1/republicd-linux-amd64"
+BINARY_URL="https://github.com/RepublicAI/networks/releases/download/v0.3.0/republicd-linux-amd64"
 GENESIS_URL="https://snapshots.linknode.org/republic-testnet/genesis"
 ADDRBOOK_URL="https://snapshots.linknode.org/republic-testnet/addrbook"
 SNAPSHOT_API_URL="https://snapshots.linknode.org/republic-testnet/api"
