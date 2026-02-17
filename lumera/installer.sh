@@ -41,7 +41,7 @@ SERVICE_NAME="lumerad"
 CHAIN_ID="lumera-mainnet-1"
 FOLDER_NAME="lumera"
 
-BINARY_URL="https://github.com/LumeraProtocol/lumera/releases/download/v1.9.1/lumera_v1.9.1_linux_amd64.tar.gz"
+BINARY_URL="https://github.com/LumeraProtocol/lumera/releases/download/v1.10.1/lumera_v1.10.1_linux_amd64.tar.gz"
 GENESIS_URL="https://snapshots.linknode.org/lumera/genesis"
 ADDRBOOK_URL="https://snapshots.linknode.org/lumera/addrbook"
 SNAPSHOT_API_URL="https://snapshots.linknode.org/lumera/api"
