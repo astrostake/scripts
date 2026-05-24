@@ -108,44 +108,49 @@ function send_discord_notification() {
             local description_text="Automated monitoring system continues to track blockchain progression towards the designated upgrade block height."
             local progress_display="${progress_percent}%"
             local block_time_display="${avg_block_time}s"
+            local network_info=$(get_network_info)
             json_payload=$(jq -n \
                 --arg title "$title" --arg description "$description_text" --arg daemon "$DAEMON_NAME" \
                 --arg current_block "$latest_block" --arg target_block "$TARGET_BLOCK" --arg blocks_remaining "$blocks_remaining" \
                 --arg progress_display "$progress_display" --arg eta_formatted "$additional_data" --arg block_time_display "$block_time_display" \
                 --arg runtime "$runtime_formatted" --argjson color "$color" --arg timestamp "$current_time" \
-                --arg footer_text "Server: $hostname | Uptime: $runtime_formatted" \
-                '{embeds: [{ "title": $title, "description": $description, "color": $color, "timestamp": $timestamp, "footer": {"text": $footer_text}, "fields": [{"name": "📊 Current Block Height", "value": $current_block, "inline": true}, {"name": "🎯 Target Block Height", "value": $target_block, "inline": true}, {"name": "⏳ Remaining Blocks", "value": $blocks_remaining, "inline": true}, {"name": "📈 Completion Progress", "value": $progress_display, "inline": true}, {"name": "⏱️ Average Block Time", "value": $block_time_display, "inline": true}, {"name": "🕐 Estimated Time to Completion", "value": $eta_formatted, "inline": true}] }]}'
+                --arg network_info "$network_info" --arg footer_text "Server: $hostname | Uptime: $runtime_formatted" \
+                '{embeds: [{ "title": $title, "description": $description, "color": $color, "timestamp": $timestamp, "footer": {"text": $footer_text}, "fields": [{"name": "🔧 Service Name", "value": $daemon, "inline": true}, {"name": "🌐 Network Information", "value": $network_info, "inline": false}, {"name": "📊 Current Block Height", "value": $current_block, "inline": true}, {"name": "🎯 Target Block Height", "value": $target_block, "inline": true}, {"name": "⏳ Remaining Blocks", "value": $blocks_remaining, "inline": true}, {"name": "📈 Completion Progress", "value": $progress_display, "inline": true}, {"name": "⏱️ Average Block Time", "value": $block_time_display, "inline": true}, {"name": "🕐 Estimated Time to Completion", "value": $eta_formatted, "inline": true}] }]}'
             ) ;;
         "SUCCESS")
             local total_runtime=$(($(date +%s) - SCRIPT_START_TIME))
             local runtime_formatted=$(format_eta $total_runtime)
             local description_text="The blockchain node upgrade process has been completed successfully. All systems are operational with the new binary version."
             local version_upgrade="${CURRENT_VERSION} → ${NEW_VERSION}"
+            local network_info=$(get_network_info)
             json_payload=$(jq -n \
                 --arg title "$title" --arg description "$description_text" --arg daemon "$DAEMON_NAME" \
                 --arg version_upgrade "$version_upgrade" --arg target_block "$TARGET_BLOCK" \
                 --arg actual_block "$latest_block" --arg runtime "$runtime_formatted" \
                 --argjson color "$color" --arg timestamp "$current_time" \
-                --arg footer_text "Server: $hostname | Operation: Completed Successfully" \
-                '{embeds: [{ "title": $title, "description": $description, "color": $color, "timestamp": $timestamp, "footer": {"text": $footer_text}, "fields": [{"name": "📦 Version Upgrade", "value": $version_upgrade, "inline": false}, {"name": "🎯 Target Block Height", "value": $target_block, "inline": true}, {"name": "✅ Actual Upgrade Block", "value": $actual_block, "inline": true}, {"name": "⏱️ Total Operation Time", "value": $runtime, "inline": true}] }]}'
+                --arg network_info "$network_info" --arg footer_text "Server: $hostname | Operation: Completed Successfully" \
+                '{embeds: [{ "title": $title, "description": $description, "color": $color, "timestamp": $timestamp, "footer": {"text": $footer_text}, "fields": [{"name": "🔧 Service Name", "value": $daemon, "inline": true}, {"name": "🌐 Network Information", "value": $network_info, "inline": false}, {"name": "📦 Version Upgrade", "value": $version_upgrade, "inline": false}, {"name": "🎯 Target Block Height", "value": $target_block, "inline": true}, {"name": "✅ Actual Upgrade Block", "value": $actual_block, "inline": true}, {"name": "⏱️ Total Operation Time", "value": $runtime, "inline": true}] }]}'
             ) ;;
         "FAILURE")
             local total_runtime=$(($(date +%s) - SCRIPT_START_TIME))
             local runtime_formatted=$(format_eta $total_runtime)
             local description_text="The blockchain node upgrade process has encountered a critical error and requires immediate attention."
+            local network_info=$(get_network_info)
             json_payload=$(jq -n \
                 --arg title "$title" --arg description "$description_text" --arg daemon "$DAEMON_NAME" \
                 --arg error_msg "$message" --arg current_block "${latest_block:-Unknown}" \
                 --arg target_block "$TARGET_BLOCK" --arg runtime "$runtime_formatted" \
                 --argjson color "$color" --arg timestamp "$current_time" \
-                --arg footer_text "Server: $hostname | Status: Requires Attention" \
-                '{embeds: [{ "title": $title, "description": $description, "color": $color, "timestamp": $timestamp, "footer": {"text": $footer_text}, "fields": [{"name": "🔥 Error Details", "value": $error_msg, "inline": false}, {"name": "📊 Current Block Height", "value": $current_block, "inline": true}, {"name": "🎯 Target Block Height", "value": $target_block, "inline": true}, {"name": "⏱️ Operation Runtime", "value": $runtime, "inline": true}] }]}'
+                --arg network_info "$network_info" --arg footer_text "Server: $hostname | Status: Requires Attention" \
+                '{embeds: [{ "title": $title, "description": $description, "color": $color, "timestamp": $timestamp, "footer": {"text": $footer_text}, "fields": [{"name": "🔧 Service Name", "value": $daemon, "inline": true}, {"name": "🌐 Network Information", "value": $network_info, "inline": false}, {"name": "🔥 Error Details", "value": $error_msg, "inline": false}, {"name": "📊 Current Block Height", "value": $current_block, "inline": true}, {"name": "🎯 Target Block Height", "value": $target_block, "inline": true}, {"name": "⏱️ Operation Runtime", "value": $runtime, "inline": true}] }]}'
             ) ;;
         *)
+            local network_info=$(get_network_info)
             json_payload=$(jq -n \
                 --arg title "$title" --arg description "$message" --argjson color "$color" \
-                --arg timestamp "$current_time" --arg footer_text "Server: $hostname | System Notification" \
-                '{embeds: [{ "title": $title, "description": $description, "color": $color, "timestamp": $timestamp, "footer": {"text": $footer_text} }]}'
+                --arg timestamp "$current_time" --arg daemon "$DAEMON_NAME" --arg network_info "$network_info" \
+                --arg footer_text "Server: $hostname | System Notification" \
+                '{embeds: [{ "title": $title, "description": $description, "color": $color, "timestamp": $timestamp, "footer": {"text": $footer_text}, "fields": [{"name": "🔧 Service Name", "value": $daemon, "inline": true}, {"name": "🌐 Network Information", "value": $network_info, "inline": false}] }]}'
             ) ;;
     esac
     curl -s -w "\n%{http_code}" -H "Content-Type: application/json" -X POST -d "$json_payload" "$DISCORD_WEBHOOK_URL" &>/dev/null
