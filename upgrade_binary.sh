@@ -102,7 +102,16 @@ function send_discord_notification() {
             ) ;;
         "PROGRESS")
             local blocks_remaining=$((TARGET_BLOCK - latest_block))
-            local progress_percent=$(echo "scale=1; ($latest_block * 100) / $TARGET_BLOCK" | bc)
+            local total_blocks_to_sync=$((TARGET_BLOCK - START_BLOCK))
+            local progress_percent=0
+            if [ "$total_blocks_to_sync" -gt 0 ]; then
+                local blocks_synced=$((latest_block - START_BLOCK))
+                progress_percent=$(echo "scale=1; ($blocks_synced * 100) / $total_blocks_to_sync" | bc)
+                if (( $(echo "$progress_percent < 0" | bc -l) )); then progress_percent=0; fi
+                if (( $(echo "$progress_percent > 100" | bc -l) )); then progress_percent=100; fi
+            else
+                progress_percent=100
+            fi
             local runtime=$(($(date +%s) - SCRIPT_START_TIME))
             local runtime_formatted=$(format_eta $runtime)
             local description_text="Automated monitoring system continues to track blockchain progression towards the designated upgrade block height."
@@ -171,7 +180,10 @@ function check_milestones() {
     if [ "$PROGRESS_UPDATE_INTERVAL" -le 0 ]; then return; fi # Do not send milestones if progress is off
     local current_block="$1"
     local target_block="$2"
-    local progress_percent=$(echo "scale=2; ($current_block * 100) / $target_block" | bc)
+    local total_blocks_to_sync=$((target_block - START_BLOCK))
+    if [ "$total_blocks_to_sync" -le 0 ]; then return; fi
+    local blocks_synced=$((current_block - START_BLOCK))
+    local progress_percent=$(echo "scale=2; ($blocks_synced * 100) / $total_blocks_to_sync" | bc)
     local progress_int=$(echo "$progress_percent / 1" | bc)
     for milestone in 75 90 95 99; do
         if [[ $progress_int -eq $milestone ]] && [[ ! -f "/tmp/milestone_${milestone}_sent" ]]; then
@@ -281,6 +293,7 @@ if [[ ! "$latest_block" =~ ^[0-9]+$ ]]; then
     FAILURE_REASON="Cannot connect to RPC endpoint \`$RPC_URL\` or retrieve current block height."
     exit 1
 fi
+START_BLOCK=$latest_block
 # Cache chain ID at startup so it's available as fallback after service restart
 CACHED_CHAIN_ID=$(echo "$rpc_status_data" | jq -r .result.node_info.network 2>/dev/null)
 if [ -z "$CACHED_CHAIN_ID" ] || [ "$CACHED_CHAIN_ID" == "null" ]; then CACHED_CHAIN_ID=""; fi
