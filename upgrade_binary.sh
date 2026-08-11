@@ -157,8 +157,13 @@ function send_discord_notification() {
 }
 
 function get_network_info() {
-    local chain_id=$(curl -s "${RPC_URL}/status" | jq -r .result.node_info.network 2>/dev/null)
-    local node_version=$(curl -s "${RPC_URL}/status" | jq -r .result.node_info.version 2>/dev/null)
+    local rpc_data=$(curl -s --max-time 5 "${RPC_URL}/status" 2>/dev/null)
+    local chain_id=$(echo "$rpc_data" | jq -r .result.node_info.network 2>/dev/null)
+    local node_version=$(echo "$rpc_data" | jq -r .result.node_info.version 2>/dev/null)
+    # Fallback to cached value if RPC is unavailable (e.g. during restart)
+    if [ -z "$chain_id" ] || [ "$chain_id" == "null" ]; then
+        chain_id="${CACHED_CHAIN_ID:-Unknown}"
+    fi
     echo "Chain: ${chain_id:-Unknown} | Node: ${node_version:-Unknown}"
 }
 
@@ -269,12 +274,17 @@ fi
 echo -e "${C_WHITE}================================================================${C_RESET}"
 
 echo -e "🔍 ${C_YELLOW}SYSTEM INITIALIZATION & VALIDATION${C_RESET}"
-latest_block=$(curl -s --max-time 10 "${RPC_URL}/status" | jq -r .result.sync_info.latest_block_height 2>/dev/null)
+rpc_status_data=$(curl -s --max-time 10 "${RPC_URL}/status" 2>/dev/null)
+latest_block=$(echo "$rpc_status_data" | jq -r .result.sync_info.latest_block_height 2>/dev/null)
 if [[ ! "$latest_block" =~ ^[0-9]+$ ]]; then
     echo -e "🔥 ${C_RED}ERROR: Cannot connect to RPC endpoint or get block height${C_RESET}"
     FAILURE_REASON="Cannot connect to RPC endpoint \`$RPC_URL\` or retrieve current block height."
     exit 1
 fi
+# Cache chain ID at startup so it's available as fallback after service restart
+CACHED_CHAIN_ID=$(echo "$rpc_status_data" | jq -r .result.node_info.network 2>/dev/null)
+if [ -z "$CACHED_CHAIN_ID" ] || [ "$CACHED_CHAIN_ID" == "null" ]; then CACHED_CHAIN_ID=""; fi
+echo -e "   ✔️  ${C_WHITE}Chain ID:        ${C_GREEN}${CACHED_CHAIN_ID:-Unknown}${C_RESET}"
 if [ ! -f "$BINARY_INSTALL_PATH/$DAEMON_NAME" ]; then
     echo -e "🔥 ${C_RED}ERROR: Current binary not found at $BINARY_INSTALL_PATH/$DAEMON_NAME${C_RESET}"
     FAILURE_REASON="Current binary not found at \`$BINARY_INSTALL_PATH/$DAEMON_NAME\`."
@@ -338,7 +348,26 @@ while true; do
             exit 1
         fi
 
-        sleep 5
+        echo -e "   ⏳ ${C_YELLOW}Phase 4: Waiting for RPC to become available...${C_RESET}"
+        RPC_WAIT_TIMEOUT=60
+        RPC_READY=0
+        for i in $(seq 1 $((RPC_WAIT_TIMEOUT / 2))); do
+            rpc_check=$(curl -s --max-time 3 "${RPC_URL}/status" 2>/dev/null | jq -r .result.node_info.network 2>/dev/null)
+            if [ -n "$rpc_check" ] && [ "$rpc_check" != "null" ]; then
+                RPC_READY=1
+                CACHED_CHAIN_ID="$rpc_check"  # Update cache with post-upgrade chain ID
+                echo -e "   ✅ ${C_GREEN}RPC is ready after $((i * 2)) seconds${C_RESET}"
+                break
+            fi
+            sleep 2
+        done
+
+        if [ "$RPC_READY" -eq 0 ]; then
+            echo -e "   🔥 ${C_RED}ERROR: RPC did not become ready within ${RPC_WAIT_TIMEOUT}s. Node may have crashed.${C_RESET}"
+            FAILURE_REASON="Upgrade was triggered at block **${latest_block}** (target: **${TARGET_BLOCK}**). Binary was replaced and service restarted, but RPC endpoint did not respond within **${RPC_WAIT_TIMEOUT} seconds**. The node may have crashed during startup or state migration. Please check logs with \`journalctl -u ${SERVICE_NAME} --no-pager -n 100\`."
+            exit 1
+        fi
+
         actual_version=$($BINARY_INSTALL_PATH/$DAEMON_NAME version 2>&1)
         echo -e "   ✅ ${C_WHITE}Post-upgrade version verification: ${C_GREEN}$actual_version${C_RESET}"
         
